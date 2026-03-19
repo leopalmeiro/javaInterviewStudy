@@ -405,12 +405,496 @@ System.out.println(decoder.decodeString("2[3[a]b]")); // Output: "aaabaaab"
 
 ---
 
+## 5. Effective Final in Java
+
+### Question
+What is "effective final" in Java? Explain with examples and when it's used.
+
+### Answer
+
+**Effective Final Definition:**
+A variable is considered "effective final" if it is not declared as `final` but is never reassigned after initialization. This concept was introduced in Java 8 to allow local variables to be used in lambda expressions and anonymous classes without requiring them to be explicitly declared as `final`.
+
+**Examples:**
+
+```java
+public class EffectiveFinalExample {
+    
+    public void demonstrateEffectiveFinal() {
+        int x = 10; // Effective final - never reassigned
+        
+        // Can be used in lambda (Java 8+)
+        Runnable r = () -> System.out.println(x);
+        
+        // Can be used in anonymous class
+        Thread t = new Thread(new Runnable() {
+            @Override
+            public void run() {
+                System.out.println(x); // OK - x is effectively final
+            }
+        });
+        
+        // x = 20; // Uncommenting this would make x not effectively final
+    }
+    
+    public void demonstrateNotEffectiveFinal() {
+        int y = 5;
+        y = 10; // y is reassigned, so not effectively final
+        
+        // This would cause compilation error
+        // Runnable r = () -> System.out.println(y); // Error: y is not effectively final
+    }
+}
+```
+
+**When Effective Final is Required:**
+- **Lambda Expressions**: Local variables must be effectively final to be captured
+- **Anonymous Classes**: Same restriction applies
+- **Method References**: Variables used in method references must be effectively final
+
+**Key Differences from `final`:**
+- `final` variables cannot be reassigned at all
+- Effective final variables can be reassigned, but aren't (by convention)
+- Compiler enforces effective finality for lambda capture
+
+**Best Practices:**
+- Prefer `final` for constants and immutable references
+- Use effective final for variables that logically shouldn't change
+- IDEs often suggest making variables final if they're effectively final
+
+---
+
+## 6. Generics: <? super Animal> vs <? extends Animal>
+
+### Question
+Explain the differences between `<? super Animal>` and `<? extends Animal>` in Java generics. What are their advantages and disadvantages? Provide examples.
+
+### Answer
+
+**PECS Principle:**
+- **Producer Extends Consumer Super** (PECS)
+- Use `extends` when you only need to read from a collection (producer)
+- Use `super` when you only need to write to a collection (consumer)
+
+**<? extends Animal> (Upper Bounded Wildcard):**
+
+```java
+public void printAnimals(List<? extends Animal> animals) {
+    for (Animal animal : animals) {
+        animal.makeSound(); // OK - can read as Animal
+    }
+    // animals.add(new Dog()); // ERROR - cannot add to ? extends Animal
+    // animals.add(new Cat()); // ERROR - cannot add to ? extends Animal
+}
+```
+
+**Advantages:**
+- **Type Safety**: Prevents adding wrong types to collections
+- **Flexibility**: Method accepts `List<Dog>`, `List<Cat>`, `List<Animal>`
+- **Read Operations**: Safe to read elements as the upper bound type
+
+**Disadvantages:**
+- **Write Restrictions**: Cannot add elements (except null)
+- **Limited Operations**: Cannot use methods that require specific subtypes
+
+**<? super Animal> (Lower Bounded Wildcard):**
+
+```java
+public void addAnimals(List<? super Animal> animals) {
+    animals.add(new Dog()); // OK - can add Dog (subtype of Animal)
+    animals.add(new Cat()); // OK - can add Cat (subtype of Animal)
+    // Animal animal = animals.get(0); // ERROR - can only read as Object
+}
+```
+
+**Advantages:**
+- **Write Operations**: Can add elements of the lower bound type and its subtypes
+- **Flexibility**: Method accepts `List<Animal>`, `List<Object>`
+- **Consumer Pattern**: Perfect for methods that add elements
+
+**Disadvantages:**
+- **Read Restrictions**: Can only read as `Object` (not useful for specific types)
+- **Limited Flexibility**: Cannot accept `List<Dog>` (Dog is not a supertype of Animal)
+
+**Complete Example:**
+
+```java
+class Animal {
+    void makeSound() { System.out.println("Animal sound"); }
+}
+
+class Dog extends Animal {
+    @Override
+    void makeSound() { System.out.println("Woof"); }
+}
+
+class Cat extends Animal {
+    @Override
+    void makeSound() { System.out.println("Meow"); }
+}
+
+public class WildcardExample {
+    
+    // Producer - use extends
+    public static void printAnimalSounds(List<? extends Animal> animals) {
+        for (Animal animal : animals) {
+            animal.makeSound();
+        }
+    }
+    
+    // Consumer - use super
+    public static void addDogs(List<? super Animal> animals) {
+        animals.add(new Dog());
+        animals.add(new Cat());
+    }
+    
+    public static void main(String[] args) {
+        List<Dog> dogs = new ArrayList<>();
+        dogs.add(new Dog());
+        
+        List<Animal> animals = new ArrayList<>();
+        
+        // Works with extends
+        printAnimalSounds(dogs);    // List<Dog> -> ? extends Animal ✓
+        printAnimalSounds(animals); // List<Animal> -> ? extends Animal ✓
+        
+        // Works with super
+        addDogs(animals); // List<Animal> -> ? super Animal ✓
+        // addDogs(dogs); // ERROR: List<Dog> -> ? super Animal ✗
+    }
+}
+```
+
+**Key Learning Points:**
+- **PECS Rule**: "Producer extends, Consumer super"
+- **Read vs Write**: Use extends for reading, super for writing
+- **Common Pitfalls**: Trying to add to `? extends T` or read specifically from `? super T`
+- **Real-world Usage**: `Collections.copy()` uses `? super T` for destination, `? extends T` for source
+
+---
+
+## 7. Clean Code: Unnecessary Code in Boolean Method
+
+### Question
+Review the following static method that returns a boolean. The method has no logical issues (no null pointer exceptions, correct primitive/wrapper handling), but contains unnecessary code. Identify the clean code violations and suggest improvements.
+
+```java
+public static boolean isValidUser(User user) {
+    boolean result = false;
+    
+    if (user != null) {
+        String name = user.getName();
+        if (name != null && !name.trim().isEmpty()) {
+            Integer age = user.getAge();
+            if (age != null && age >= 18) {
+                Boolean isActive = user.getIsActive();
+                if (isActive != null && isActive.booleanValue()) {
+                    result = true;
+                }
+            }
+        }
+    }
+    
+    return result;
+}
+```
+
+What clean code principles are violated? How would you refactor this?
+
+### Answer
+
+**Clean Code Violations:**
+
+1. **Unnecessary Variable Initialization**: `boolean result = false;` is redundant
+2. **Deep Nesting**: Multiple nested if-statements make code hard to read
+3. **Primitive vs Wrapper Confusion**: Using `Boolean` wrapper when `boolean` primitive would suffice
+4. **Verbose Null Checks**: Can be simplified with modern Java features
+5. **Early Return Principle**: Not using early returns to reduce nesting
+
+**Refactored Version:**
+
+```java
+public static boolean isValidUser(User user) {
+    if (user == null) {
+        return false;
+    }
+    
+    String name = user.getName();
+    if (name == null || name.trim().isEmpty()) {
+        return false;
+    }
+    
+    Integer age = user.getAge();
+    if (age == null || age < 18) {
+        return false;
+    }
+    
+    Boolean isActive = user.getIsActive();
+    return isActive != null && isActive;
+}
+
+// Alternative: More concise with Optional (Java 8+)
+public static boolean isValidUserOptional(User user) {
+    return Optional.ofNullable(user)
+        .map(User::getName)
+        .filter(name -> !name.trim().isEmpty())
+        .isPresent() &&
+        Optional.ofNullable(user.getAge())
+        .filter(age -> age >= 18)
+        .isPresent() &&
+        Boolean.TRUE.equals(user.getIsActive());
+}
+```
+
+**Key Improvements:**
+- **Early Returns**: Exit immediately when conditions fail
+- **Reduced Nesting**: Maximum of one level deep
+- **Guard Clauses**: Check invalid conditions first
+- **Boolean Logic**: Direct return of boolean expressions
+- **Optional Usage**: Modern approach for null-safe operations
+
+**Primitive vs Wrapper Considerations:**
+- `boolean` (primitive): Cannot be null, more efficient
+- `Boolean` (wrapper): Can be null, useful for database mappings
+- Use `Boolean.TRUE.equals(booleanWrapper)` for null-safe boolean checks
+
+---
+
+## 8. String Immutability in Java
+
+### Question
+Explain string immutability in Java. Why are strings immutable? What are the advantages and disadvantages?
+
+### Answer
+
+**What is String Immutability?**
+Once a `String` object is created, its value cannot be changed. Any operation that appears to modify a string actually creates a new string object.
+
+```java
+String s = "Hello";
+s.concat(" World"); // Creates new string "Hello World", s still "Hello"
+s = s.concat(" World"); // Now s points to new string
+```
+
+**Why Strings are Immutable:**
+1. **Security**: Strings are used for sensitive data (passwords, file paths, network connections)
+2. **Thread Safety**: Multiple threads can safely share string instances
+3. **Caching**: String literals are cached in the String Pool for memory efficiency
+4. **Hash Code Caching**: Immutable objects can cache hash codes
+
+**Advantages:**
+- **Thread Safety**: No synchronization needed for string operations
+- **Security**: Prevents accidental or malicious modification
+- **Performance**: String Pool reduces memory usage
+- **HashMap Keys**: Safe to use as keys since hash code won't change
+
+**Disadvantages:**
+- **Memory Overhead**: Each modification creates new objects
+- **Performance**: Frequent modifications can create many temporary objects
+- **Garbage Collection**: More objects to clean up
+
+**StringBuilder vs StringBuffer:**
+```java
+// For single-threaded, mutable string operations
+StringBuilder sb = new StringBuilder("Hello");
+sb.append(" World"); // Modifies same object
+String result = sb.toString();
+
+// For multi-threaded, thread-safe mutable operations
+StringBuffer sbuf = new StringBuffer("Hello");
+sbuf.append(" World"); // Thread-safe
+```
+
+**Key Learning Points:**
+- Use `StringBuilder` for concatenations in loops
+- String Pool optimization for memory
+- Security implications of immutability
+- Performance trade-offs between `String`, `StringBuilder`, and `StringBuffer`
+
+---
+
+## 9. HashMap vs HashTable
+
+### Question
+Compare HashMap and HashTable in Java. What are the key differences, advantages, and when to use each?
+
+### Answer
+
+**Key Differences:**
+
+| Feature | HashMap | HashTable |
+|---------|---------|-----------|
+| **Synchronization** | Not synchronized | Synchronized |
+| **Null Keys/Values** | Allows one null key, multiple null values | Doesn't allow null keys or values |
+| **Performance** | Faster (no synchronization overhead) | Slower due to synchronization |
+| **Thread Safety** | Not thread-safe | Thread-safe |
+| **Introduced** | Java 1.2 | Java 1.0 (legacy) |
+
+**HashMap Example:**
+```java
+Map<String, Integer> hashMap = new HashMap<>();
+hashMap.put("Alice", 25);
+hashMap.put("Bob", 30);
+hashMap.put(null, 0); // OK
+hashMap.put("Charlie", null); // OK
+```
+
+**HashTable Example:**
+```java
+Map<String, Integer> hashTable = new HashTable<>();
+hashTable.put("Alice", 25);
+hashTable.put("Bob", 30);
+// hashTable.put(null, 0); // Throws NullPointerException
+// hashTable.put("Charlie", null); // Throws NullPointerException
+```
+
+**ConcurrentHashMap (Modern Alternative):**
+```java
+Map<String, Integer> concurrentMap = new ConcurrentHashMap<>();
+// Better performance than HashTable for concurrent operations
+// Allows null values but not null keys
+```
+
+**When to Use:**
+- **HashMap**: Single-threaded applications, better performance
+- **HashTable**: Legacy code requiring synchronization (rarely used now)
+- **ConcurrentHashMap**: Multi-threaded applications needing thread safety
+
+**Key Learning Points:**
+- HashTable is legacy; prefer ConcurrentHashMap for thread safety
+- HashMap allows nulls, others generally don't
+- Performance: HashMap > ConcurrentHashMap > HashTable
+- Use Collections.synchronizedMap() to make HashMap thread-safe if needed
+
+---
+
+## 10. Exception Handling Best Practices
+
+### Question
+Discuss Java exception handling best practices. What are checked vs unchecked exceptions? Provide examples of proper exception handling.
+
+### Answer
+
+**Checked vs Unchecked Exceptions:**
+
+**Checked Exceptions:**
+- Must be declared in method signature or handled
+- Represent recoverable conditions
+- Examples: `IOException`, `SQLException`
+
+**Unchecked Exceptions:**
+- Don't need to be declared or caught
+- Represent programming errors
+- Examples: `NullPointerException`, `IllegalArgumentException`
+
+**Exception Hierarchy:**
+```
+Throwable
+├── Exception (Checked)
+│   ├── IOException
+│   ├── SQLException
+│   └── Custom checked exceptions
+└── RuntimeException (Unchecked)
+    ├── NullPointerException
+    ├── IllegalArgumentException
+    └── Custom unchecked exceptions
+```
+
+**Best Practices:**
+
+```java
+public class ExceptionHandlingExample {
+    
+    // 1. Use specific exceptions
+    public User findUserById(String id) throws UserNotFoundException {
+        if (id == null) {
+            throw new IllegalArgumentException("ID cannot be null");
+        }
+        
+        User user = userRepository.findById(id);
+        if (user == null) {
+            throw new UserNotFoundException("User not found: " + id);
+        }
+        return user;
+    }
+    
+    // 2. Don't catch generic Exception
+    public void processFile(String filePath) {
+        try (BufferedReader reader = new BufferedReader(new FileReader(filePath))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                processLine(line);
+            }
+        } catch (IOException e) {
+            // Specific exception handling
+            logger.error("Failed to process file: " + filePath, e);
+            throw new FileProcessingException("Could not process file", e);
+        }
+    }
+    
+    // 3. Use try-with-resources for AutoCloseable
+    public String readFile(String path) throws IOException {
+        try (FileInputStream fis = new FileInputStream(path);
+             InputStreamReader isr = new InputStreamReader(fis);
+             BufferedReader br = new BufferedReader(isr)) {
+            return br.lines().collect(Collectors.joining("\n"));
+        }
+    }
+    
+    // 4. Don't suppress exceptions
+    public void riskyOperation() {
+        try {
+            performRiskyOperation();
+        } catch (Exception e) {
+            logger.error("Operation failed", e);
+            // Don't just swallow the exception!
+            throw new RuntimeException("Operation failed", e);
+        }
+    }
+}
+
+// Custom exception
+class UserNotFoundException extends Exception {
+    public UserNotFoundException(String message) {
+        super(message);
+    }
+}
+
+class FileProcessingException extends RuntimeException {
+    public FileProcessingException(String message, Throwable cause) {
+        super(message, cause);
+    }
+}
+```
+
+**Key Principles:**
+- **Fail Fast**: Throw exceptions early for invalid inputs
+- **Don't Catch Generic Exception**: Be specific about what you catch
+- **Preserve Stack Trace**: Use exception chaining with `initCause()`
+- **Log and Re-throw**: Log exceptions but don't lose the original stack trace
+- **Use Try-with-Resources**: Automatic resource management
+- **Document Exceptions**: Use `@throws` in JavaDoc
+
+**Key Learning Points:**
+- Checked exceptions for recoverable errors, unchecked for programming errors
+- Prefer unchecked exceptions for business logic violations
+- Always clean up resources properly
+- Don't hide exceptions - they provide valuable debugging information
+
+---
+
 ## Summary
 
-These four problems test different Java competencies:
+These ten problems test different Java competencies:
 1. **Bug Identification**: Type safety, understanding method signatures
 2. **Calculation Problem**: Arithmetic, data structures, rounding/precision
 3. **Logic Problem**: Collections, Map/Set usage, grouping and filtering data
 4. **String Decoding**: Stack/Recursion, string manipulation, nested data structures
+5. **Effective Final**: Java 8+ features, lambda expressions, variable capture
+6. **Generics Wildcards**: PECS principle, type bounds, generic constraints
+7. **Clean Code**: Code readability, refactoring, primitive vs wrapper types
+8. **String Immutability**: Memory management, performance, security implications
+9. **Collections**: HashMap vs HashTable, thread safety, performance trade-offs
+10. **Exception Handling**: Error management, checked vs unchecked, best practices
 
 All are common in real-world development and demonstrate practical problem-solving skills.
